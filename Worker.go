@@ -5,3 +5,11 @@ type Worker struct {
 	pending  int
 	index    int
 }
+
+func (w *Worker) work(done chan *Worker) {
+	for {
+		request := <-w.requests
+		request.result <- request.job()
+		done <- w
+	}
+}
