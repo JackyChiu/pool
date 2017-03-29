@@ -4,6 +4,3 @@ type Balancer struct {
 	pool Pool
 	done chan *Worker
 }
-
-func main() {
-}
