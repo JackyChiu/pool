@@ -1,5 +1,7 @@
 package main
 
+import "fmt"
+
 type Pool []*Worker
 
 func (p Pool) Len() int {
@@ -24,4 +26,16 @@ func (p *Pool) Pop() interface{} {
 	elem := prev[last]
 	*p = prev[:last]
 	return elem
+}
+
+func (p Pool) String() string {
+	// TODO: Add str devation
+	var workers string
+	sum := 0
+	for _, worker := range p {
+		sum += worker.pending
+		workers += string(worker.pending)
+	}
+	avg := sum / len(p)
+	return fmt.Sprintf("Workers: %v, Avg Load: %v", workers, avg)
 }
