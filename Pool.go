@@ -34,7 +34,7 @@ func (p Pool) String() string {
 	sum := 0
 	for _, worker := range p {
 		sum += worker.pending
-		workers += string(worker.pending)
+		workers += string(worker.pending) + " "
 	}
 	avg := sum / len(p)
 	return fmt.Sprintf("Workers: %v, Avg Load: %v", workers, avg)
