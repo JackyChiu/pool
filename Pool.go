@@ -3,6 +3,7 @@ package main
 import (
 	"container/heap"
 	"fmt"
+	"math"
 	"strconv"
 )
 
@@ -44,17 +45,31 @@ func (p *Pool) Pop() interface{} {
 	return elem
 }
 
-func (p Pool) String() string {
-	// TODO: Add str devation
+func (p Pool) meanAndStdDev() (float64, float64) {
 	var (
-		workers string
-		sum     int
-		avg     float32
+		mean   float64
+		stdDev float64
 	)
+
 	for _, worker := range p {
-		sum += worker.pending
+		mean += float64(worker.pending)
+	}
+	mean /= float64(len(p))
+
+	for _, worker := range p {
+		stdDev += math.Pow((float64(worker.pending) - mean), 2)
+	}
+	stdDev = math.Sqrt((1 / float64(len(p)) * stdDev))
+
+	return mean, stdDev
+}
+
+func (p Pool) String() string {
+	var workers string
+	for _, worker := range p {
 		workers += strconv.Itoa(worker.pending) + " "
 	}
-	avg = float32(sum) / float32(len(p))
-	return fmt.Sprintf("Workers: %v, Avg Load: %v", workers, avg)
+
+	mean, stdDev := p.meanAndStdDev()
+	return fmt.Sprintf("Workers: %v| Avg Load: %.2f | Std Dev: %.2f", workers, mean, stdDev)
 }
