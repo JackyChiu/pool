@@ -1,11 +1,24 @@
 package main
 
 import (
+	"container/heap"
 	"fmt"
 	"strconv"
 )
 
 type Pool []*Worker
+
+func NewPool(workers int, done chan *Worker) *Pool {
+	var pool Pool
+	for i := 0; i < workers; i++ {
+		requests := make(chan Request)
+		worker := Worker{requests, 0, i}
+		go worker.Work(done)
+		pool = append(pool, &worker)
+	}
+	heap.Init(&pool)
+	return &pool
+}
 
 func (p Pool) Len() int {
 	return len(p)
