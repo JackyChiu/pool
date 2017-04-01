@@ -1,6 +1,9 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 type Pool []*Worker
 
@@ -30,12 +33,15 @@ func (p *Pool) Pop() interface{} {
 
 func (p Pool) String() string {
 	// TODO: Add str devation
-	var workers string
-	sum := 0
+	var (
+		workers string
+		sum     int
+		avg     float32
+	)
 	for _, worker := range p {
 		sum += worker.pending
-		workers += string(worker.pending) + " "
+		workers += strconv.Itoa(worker.pending) + " "
 	}
-	avg := sum / len(p)
+	avg = float32(sum / len(p))
 	return fmt.Sprintf("Workers: %v, Avg Load: %v", workers, avg)
 }
