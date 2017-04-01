@@ -31,16 +31,21 @@ func (p Pool) Less(i, j int) bool {
 
 func (p Pool) Swap(i, j int) {
 	p[i], p[j] = p[j], p[i]
+	p[i].index = i
+	p[j].index = j
 }
 
 func (p *Pool) Push(x interface{}) {
-	*p = append(*p, x.(*Worker))
+	worker := x.(*Worker)
+	worker.index = len(*p)
+	*p = append(*p, worker)
 }
 
 func (p *Pool) Pop() interface{} {
 	prev := *p
 	last := len(prev) - 1
 	elem := prev[last]
+	elem.index = -1
 	*p = prev[:last]
 	return elem
 }
