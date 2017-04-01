@@ -6,7 +6,7 @@ type Worker struct {
 	index    int
 }
 
-func (w *Worker) work(done chan *Worker) {
+func (w *Worker) Work(done chan *Worker) {
 	for {
 		request := <-w.requests
 		request.result <- request.job()

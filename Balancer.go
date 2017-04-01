@@ -15,6 +15,7 @@ func (b *Balancer) Balance(requests <-chan Request) {
 		select {
 		case request := <-requests:
 			b.dispatch(request)
+			fmt.Println(b.pool)
 		case worker := <-b.done:
 			b.complete(worker)
 			fmt.Println(b.pool)
