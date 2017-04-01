@@ -11,7 +11,7 @@ type Pool []*Worker
 func NewPool(workers int, done chan *Worker) *Pool {
 	var pool Pool
 	for i := 0; i < workers; i++ {
-		requests := make(chan Request)
+		requests := make(chan Request, 25)
 		worker := Worker{requests, 0, i}
 		go worker.Work(done)
 		pool = append(pool, &worker)
@@ -55,6 +55,6 @@ func (p Pool) String() string {
 		sum += worker.pending
 		workers += strconv.Itoa(worker.pending) + " "
 	}
-	avg = float32(sum / len(p))
+	avg = float32(sum) / float32(len(p))
 	return fmt.Sprintf("Workers: %v, Avg Load: %v", workers, avg)
 }
