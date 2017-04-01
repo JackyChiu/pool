@@ -6,7 +6,7 @@ import (
 )
 
 type Balancer struct {
-	pool Pool
+	pool *Pool
 	done chan *Worker
 }
 
@@ -18,19 +18,18 @@ func (b *Balancer) Balance(requests <-chan Request) {
 			fmt.Println(b.pool)
 		case worker := <-b.done:
 			b.complete(worker)
-			fmt.Println(b.pool)
 		}
 	}
 }
 
 func (b *Balancer) dispatch(request Request) {
-	w := heap.Pop(&b.pool).(*Worker)
+	w := heap.Pop(b.pool).(*Worker)
 	w.requests <- request
 	w.pending += 1
-	heap.Push(&b.pool, w)
+	heap.Push(b.pool, w)
 }
 
 func (b Balancer) complete(worker *Worker) {
 	worker.pending -= 1
-	heap.Fix(&b.pool, worker.index)
+	heap.Fix(b.pool, worker.index)
 }

@@ -12,7 +12,7 @@ func main() {
 	done := make(chan *Worker)
 
 	pool := NewPool(runtime.NumCPU(), done)
-	balancer := &Balancer{*pool, done}
+	balancer := &Balancer{pool, done}
 
 	go balancer.Balance(requests)
 
