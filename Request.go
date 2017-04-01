@@ -1,6 +1,9 @@
 package main
 
-import "time"
+import (
+	"math/rand"
+	"time"
+)
 
 type Request struct {
 	job    func() int
@@ -10,14 +13,15 @@ type Request struct {
 func requester(work chan<- Request) {
 	result := make(chan int)
 	for {
-		// TODO: Make random sleep
-		time.Sleep(2 * time.Second)
+		randDuration := time.Duration(rand.Intn(1))
+		time.Sleep(randDuration * time.Second)
 		work <- Request{job, result}
 		<-result
 	}
 }
 
 func job() int {
-	time.Sleep(1 * time.Second)
+	randDuration := time.Duration(rand.Intn(1))
+	time.Sleep(randDuration * time.Second)
 	return 1
 }

@@ -1,26 +1,30 @@
 package main
 
-import "container/heap"
+import (
+	"container/heap"
+	"fmt"
+)
 
 type Balancer struct {
 	pool Pool
 	done chan *Worker
 }
 
-func (b *Balancer) Balance(work <-chan Request) {
+func (b *Balancer) Balance(requests <-chan Request) {
 	for {
 		select {
-		case req := <-work:
-			b.dispatch(req)
+		case request := <-requests:
+			b.dispatch(request)
 		case worker := <-b.done:
 			b.complete(worker)
+			fmt.Println(b.pool)
 		}
 	}
 }
 
-func (b *Balancer) dispatch(req Request) {
+func (b *Balancer) dispatch(request Request) {
 	w := heap.Pop(&b.pool).(*Worker)
-	w.requests <- req
+	w.requests <- request
 	w.pending += 1
 	heap.Push(&b.pool, w)
 }
