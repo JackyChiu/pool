@@ -10,18 +10,18 @@ type Request struct {
 	result chan int
 }
 
-func requester(work chan<- Request) {
+func requester(requests chan<- Request) {
 	result := make(chan int)
 	for {
 		randDuration := time.Duration(rand.Intn(1))
 		time.Sleep(randDuration * time.Second)
-		work <- Request{job, result}
+		requests <- Request{job, result}
 		<-result
 	}
 }
 
 func job() int {
-	randDuration := time.Duration(rand.Intn(1))
-	time.Sleep(randDuration * time.Second)
+	randDuration := time.Duration(rand.Intn(3))
+	time.Sleep(randDuration * 5 * time.Second)
 	return 1
 }
