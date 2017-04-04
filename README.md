@@ -20,7 +20,8 @@ As we can see as time goes by and the average load goes up the standard deviatio
 
 ## Design
 ![diagram](.github/lb.png)
-*The design was based off the talk [concurrency is not parallelism](https://www.youtube.com/watch?v=cN_DpYBzKso) by Rob Pike*
+
+*The design was based off the talk [concurrency is not parallelism](https://www.youtube.com/watch?v=cN_DpYBzKso) by Rob Pike, the diagram is also from there*
 
 1. Requests are made by a requester
 1. The Balancer dispatch's requests to a select worker in the worker pool
