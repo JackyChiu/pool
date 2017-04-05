@@ -28,11 +28,11 @@ As time goes by the average load goes up the standard deviation remains about th
 1. The Worker will execute the task specified by the request 
 
 ## Future
-In the future I'd like to test this out with a TCP server with real tasks, and do a benchmark then
+In the future I'd like to test this out with a TCP or HTTP server with real tasks
 
 ## Try it
-```
-go get https://github.com/JackyChiu/trivial-load-balancer
+```bash
+go get github.com/JackyChiu/trivial-load-balancer
 go build
 ./trivial-load-balancer
 ```
