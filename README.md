@@ -14,7 +14,7 @@ The gif below shows values for:
 ![gif](.github/lb.gif)
 
 The standard deviation measures how spread out the pending requests are across workers, giving us an idea of how well the balancer is distributing requests.
-As we can see as time goes by and the average load goes up the standard deviation remains about the same!
+As time goes by the average load goes up the standard deviation remains about the same!
 
 **Basically the smaller the `Std Dev` the better work is being distributed!**
 
@@ -29,3 +29,10 @@ As we can see as time goes by and the average load goes up the standard deviatio
 
 ## Future
 In the future I'd like to test this out with a TCP server with real tasks, and do a benchmark then
+
+## Try it
+```
+go get https://github.com/JackyChiu/trivial-load-balancer
+go build
+./trivial-load-balancer
+```
