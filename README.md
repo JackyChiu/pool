@@ -32,7 +32,8 @@ In the future I'd like to test this out with a TCP or HTTP server with real task
 
 ## Try it
 ```bash
-go get github.com/JackyChiu/trivial-load-balancer
+git clone https://github.com/JackyChiu/trivial-load-balancer
+cd trivial-load-balancer/
 go build
 ./trivial-load-balancer
 ```
