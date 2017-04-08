@@ -45,7 +45,6 @@ func (p *Pool) Pop() interface{} {
 	prev := *p
 	last := len(prev) - 1
 	elem := prev[last]
-	elem.index = -1
 	*p = prev[:last]
 	return elem
 }
