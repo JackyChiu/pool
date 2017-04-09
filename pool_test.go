@@ -2,6 +2,7 @@ package main
 
 import (
 	"container/heap"
+	"math"
 	"reflect"
 	"testing"
 )
@@ -65,6 +66,34 @@ func TestPool_Pop(t *testing.T) {
 		worker := test.pool.Pop().(*Worker)
 		if !reflect.DeepEqual(worker, test.expected) {
 			t.Errorf("got %+v, expected: %+v", worker, test.expected)
+		}
+	}
+}
+
+var poolStatTests = []struct {
+	pool   Pool
+	mean   float64
+	stdDev float64
+}{
+	{pools[0], 1.5, 1.12},
+	{pools[1], 1.5, 1.12},
+	{pools[2], 0, 0},
+	{pools[3], 5.75, 2.59},
+	{pools[4], 6.0, 3.37},
+}
+
+func TestPool_stats(t *testing.T) {
+	decimalPoint := 0.0001
+	for _, test := range poolStatTests {
+		mean, stdDev := test.pool.stats()
+		meanDiff := float64(mean - test.mean)
+		stdDevDiff := float64(stdDev - test.stdDev)
+
+		if meanDiff != 0 && math.Abs(meanDiff) < decimalPoint {
+			t.Errorf("got %+v, expected: %+v", mean, test.mean)
+		}
+		if stdDevDiff != 0 && math.Abs(stdDevDiff) < decimalPoint {
+			t.Errorf("got %+v, expected: %+v", stdDev, test.stdDev)
 		}
 	}
 }
