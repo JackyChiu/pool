@@ -7,8 +7,10 @@ import (
 	"strconv"
 )
 
+// Pool is used as the worker pool
 type Pool []*Worker
 
+// NewPool creates a new pool
 func NewPool(workers int, done chan *Worker) *Pool {
 	var pool Pool
 	for i := 0; i < workers; i++ {
@@ -49,6 +51,7 @@ func (p *Pool) Pop() interface{} {
 	return elem
 }
 
+// stats returns the mean and stdDev values of the pool
 func (p Pool) stats() (mean float64, stdDev float64) {
 	length := float64(len(p))
 
