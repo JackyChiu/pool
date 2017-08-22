@@ -10,8 +10,10 @@ type Worker struct {
 // Work preforms the request
 func (w *Worker) Work(done chan *Worker) {
 	for {
-		request := <-w.requests
-		request.result <- request.job()
-		done <- w
+		select {
+		case request := <-w.requests:
+			request.result <- request.job()
+			done <- w
+		}
 	}
 }

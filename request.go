@@ -21,9 +21,11 @@ func requester(requests chan<- Request) {
 	for {
 		randDuration := time.Duration(rand.Intn(1)) * time.Second
 		time.Sleep(randDuration + 250*time.Millisecond)
-		go func() {
-			requests <- Request{job, result}
-			<-result
-		}()
+		select {
+		case requests <- Request{job, result}:
+			// Sent request
+		case <-result:
+			// Request came back
+		}
 	}
 }
