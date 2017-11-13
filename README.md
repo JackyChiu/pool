@@ -1,8 +1,8 @@
-# Load Balancer
-In this trivial example the load balancer distributes work across the worker pool by giving tasks to the least loaded worker.
+# Worker Pool
+The worker pool distributes work across the workers to the least loaded worker.
 
 ## Demo
-The load balancer was tested by a load generator that produces tasks at a inconsistent interval, faster than the time it takes to complete the tasks itself. 
+The pool was tested by a load generator that produces tasks at a inconsistent interval, faster than the time it takes to complete the tasks itself. 
 The tasks also take an inconsistent amount of time to finish.
 In this example the tasks were just sleeps.
 
@@ -13,7 +13,7 @@ The gif below shows values for:
 
 ![gif](.github/lb.gif)
 
-The standard deviation measures how spread out the pending requests are across workers, giving us an idea of how well the balancer is distributing requests.
+The standard deviation measures how spread out the pending requests are across workers, giving us an idea of how well the pool is distributing work.
 As time goes by the average load goes up the standard deviation remains about the same!
 
 **Basically the smaller the `Std Dev` the better work is being distributed!**
@@ -26,14 +26,3 @@ As time goes by the average load goes up the standard deviation remains about th
 1. Requests are made by a requester
 1. The Balancer dispatch's requests to a select worker in the worker pool
 1. The Worker will execute the task specified by the request 
-
-## Future
-In the future I'd like to test this out with a TCP or HTTP server with real tasks
-
-## Try it
-```bash
-git clone https://github.com/JackyChiu/trivial-load-balancer
-cd trivial-load-balancer/
-go build
-./trivial-load-balancer
-```
