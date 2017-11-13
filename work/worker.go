@@ -1,4 +1,4 @@
-package main
+package work
 
 // Worker is a worker that takes requests and processes them
 type Worker struct {
