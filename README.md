@@ -13,11 +13,6 @@ The gif below shows values for:
 
 ![gif](.github/lb.gif)
 
-The standard deviation measures how spread out the pending requests are across workers, giving us an idea of how well the pool is distributing work.
-As time goes by the average load goes up the standard deviation remains about the same!
-
-**Basically the smaller the `Std Dev` the better work is being distributed!**
-
 ## Design
 ![diagram](.github/lb.png)
 
