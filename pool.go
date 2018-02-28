@@ -1,79 +1,54 @@
-package main
+package pool
 
 import (
-	"container/heap"
-	"fmt"
-	"math"
-	"strconv"
+	"context"
+	"sync"
 )
 
-// Pool is used as the worker pool
-type Pool []*Worker
+type Pool struct {
+	cancel   func()
+	workChan chan func() error
 
-// NewPool creates a new pool
-func NewPool(workers int, done chan *Worker) *Pool {
-	var pool Pool
-	for i := 0; i < workers; i++ {
-		requests := make(chan Request, 25)
-		worker := Worker{requests, 0, i}
-		go worker.Work(done)
-		pool = append(pool, &worker)
+	wg      sync.WaitGroup
+	errOnce sync.Once
+	err     error
+}
+
+func New(poolSize int, ctx context.Context) (*Pool, context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	p := &Pool{
+		cancel: cancel,
 	}
-	heap.Init(&pool)
-	return &pool
-}
-
-func (p Pool) Len() int {
-	return len(p)
-}
-
-func (p Pool) Less(i, j int) bool {
-	return p[i].pending < p[j].pending
-}
-
-func (p Pool) Swap(i, j int) {
-	p[i], p[j] = p[j], p[i]
-	p[i].index = i
-	p[j].index = j
-}
-
-func (p *Pool) Push(x interface{}) {
-	worker := x.(*Worker)
-	worker.index = len(*p)
-	*p = append(*p, worker)
-}
-
-func (p *Pool) Pop() interface{} {
-	prev := *p
-	last := len(prev) - 1
-	elem := prev[last]
-	*p = prev[:last]
-	return elem
-}
-
-// stats returns the mean and stdDev values of the pool
-func (p Pool) stats() (mean float64, stdDev float64) {
-	length := float64(len(p))
-
-	for _, worker := range p {
-		mean += float64(worker.pending)
+	for i := 0; i <= poolSize; i++ {
+		p.wg.Add(1)
+		go p.work()
 	}
-	mean /= length
-
-	for _, worker := range p {
-		stdDev += math.Pow((float64(worker.pending) - mean), 2)
-	}
-	stdDev = math.Sqrt((1 / length) * stdDev)
-
-	return mean, stdDev
+	return p, ctx
 }
 
-func (p Pool) String() string {
-	var workers string
-	for _, worker := range p {
-		workers += strconv.Itoa(worker.pending) + " "
+func (p *Pool) Wait() error {
+	close(p.workChan)
+	p.wg.Wait()
+	if p.cancel != nil {
+		p.cancel()
 	}
+	return p.err
+}
 
-	mean, stdDev := p.stats()
-	return fmt.Sprintf("Workers: %v| Avg Load: %.2f | Std Dev: %.2f", workers, mean, stdDev)
+func (p *Pool) Queue(fn func() error) {
+	p.workChan <- fn
+}
+
+func (p *Pool) work() {
+	defer p.wg.Done()
+	for fn := range p.workChan {
+		if err := fn(); err != nil {
+			p.errOnce.Do(func() {
+				p.err = err
+				if p.cancel != nil {
+					p.cancel()
+				}
+			})
+		}
+	}
 }
