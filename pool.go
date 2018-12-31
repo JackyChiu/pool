@@ -13,6 +13,7 @@ type taskFunc func() error
 type Pool struct {
 	ctx      context.Context
 	taskChan chan taskFunc
+	lazyChan chan taskFunc
 	errGroup errGroup
 
 	// cap is the capacity of the pool
@@ -33,6 +34,7 @@ func New(ctx context.Context, poolSize int) (*Pool, context.Context) {
 		// taskChan can be buffered up to a equalivient size of the pool.
 		// If the pool is ever filled then the allocated poolSize is too small or the task is too large.
 		taskChan: make(chan taskFunc, poolSize),
+		lazyChan: make(chan taskFunc),
 
 		cap: poolSize,
 	}, ctx
@@ -48,6 +50,21 @@ func (p *Pool) Go(task taskFunc) {
 	// how do you know if the goroutines are backed up or if you should create another goroutine?
 	// by trying to send a task and then selecting
 	// Ahh would've worked well if the task chan wasn't buffered
+	// Requiring cap + 1 tasks to start spinning up more goroutines is unexpected behaviour
+	if p.Size() < int(p.cap) {
+		select {
+		case p.lazyChan <- task:
+			return
+		default:
+			p.startWorker()
+		}
+		// reenqueue task
+		p.Go(task)
+	} else {
+		// use regular channel with buffering
+		p.taskChan <- task
+	}
+
 	select {
 	case p.taskChan <- task:
 		return

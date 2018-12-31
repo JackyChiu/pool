@@ -6,13 +6,11 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/JackyChiu/pool"
 )
 
 func TestPool(t *testing.T) {
 	poolSize := 5
-	pool := New(context.Background(), poolSize)
+	pool, _ := New(context.Background(), poolSize)
 
 	results := make(chan int)
 
@@ -42,7 +40,7 @@ func TestPool_lazily_loads_goroutines(t *testing.T) {
 
 func TestPool_exits_when_context_is_cancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	pool := New(ctx, 5)
+	pool, ctx := New(ctx, 5)
 	var events int32
 
 	cancel()
@@ -65,7 +63,7 @@ func TestPool_exits_when_context_is_cancelled(t *testing.T) {
 
 func TestPool_exits_on_error(t *testing.T) {
 	expectedErr := errors.New("error")
-	pool := New(context.Background(), 5)
+	pool, _ := New(context.Background(), 5)
 	var events int32
 
 	for i := 0; i < 100; i++ {
@@ -104,7 +102,7 @@ func TestZeroGroup(t *testing.T) {
 
 	for _, tc := range cases {
 		poolSize := 5
-		pool := pool.New(context.Background(), poolSize)
+		pool, _ := New(context.Background(), poolSize)
 
 		var firstErr error
 		for i, err := range tc.errs {
@@ -139,7 +137,7 @@ func TestWithContext(t *testing.T) {
 
 	for _, tc := range cases {
 		ctx := context.Background()
-		pool := pool.New(ctx, 5)
+		pool, ctx := New(ctx, 5)
 
 		for _, err := range tc.errs {
 			err := err

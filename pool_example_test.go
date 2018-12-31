@@ -26,12 +26,16 @@ func fakeSearch(kind string) Search {
 	}
 }
 
-func ExamplePool_without() {
-	parts := make([]int, 20)
+func fake() error {
+	return nil
+}
+
+func ExamplePool_without() error {
+	parts := make([]string, 20)
 	partChan := make(chan string)
 	errChan := make(chan error, 1)
 
-	ctx := context.WithTimeout(context.Background(), time.Second)
+	ctx, _ := context.WithTimeout(context.Background(), time.Second)
 
 	// Bounded Consumers/Workers
 	var wg sync.WaitGroup
@@ -40,7 +44,7 @@ func ExamplePool_without() {
 		go func() {
 			defer wg.Done()
 			for part := range partChan {
-				if err := d.DigestPartFile(ctx, job, part); err != nil {
+				if err := fake(); err != nil {
 					errChan <- ctx.Err()
 					return
 				}
@@ -58,7 +62,7 @@ func ExamplePool_without() {
 	// Producer in main goroutine
 	for _, part := range parts {
 		select {
-		case partChan <- part.Path:
+		case partChan <- part:
 		case <-ctx.Done():
 			break
 		}
@@ -69,22 +73,24 @@ func ExamplePool_without() {
 	select {
 	case err := <-errChan:
 		// did error happen?
+		return err
 	default:
 		// success
+		return nil
 	}
 }
 
 func ExamplePool_with() {
-	parts := make([]int, 20)
+	parts := make([]string, 20)
 	partChan := make(chan string)
 
-	ctx := context.WithTimeout(context.Background(), time.Second)
+	ctx, _ := context.WithTimeout(context.Background(), time.Second)
 
 	// Singular Producer
 	go func() {
 		for _, part := range parts {
 			select {
-			case partChan <- part.Path:
+			case partChan <- part:
 			case <-ctx.Done():
 				break
 			}
@@ -93,17 +99,17 @@ func ExamplePool_with() {
 	}()
 
 	// Bounded workers
-	pool := pool.New(ctx, 20)
+	pool, ctx := pool.New(ctx, 20)
 	// Singular Consumers
 	for part := range partChan {
 		part := part // https://golang.org/doc/faq#closures_and_goroutines
 		pool.Go(func() error {
-			return d.DigestPartFile(ctx, job, part)
+			return fake(part)
 		})
 	}
 
 	if err := pool.Wait(); err != nil {
-		return err
+		//return err
 	}
 }
 
@@ -174,7 +180,7 @@ func ExamplePool_waitgroup_functionality() {
 // and error-handling.
 func ExamplePool_parallel() {
 	Google := func(ctx context.Context, query string) ([]Result, error) {
-		g := pool.New(ctx, 1)
+		g, ctx := pool.New(ctx, 1)
 
 		searches := []Search{Web, Image, Video}
 		results := make([]Result, len(searches))
