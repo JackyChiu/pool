@@ -1,23 +1,9 @@
-# Worker Pool
-The worker pool distributes work across the workers to the least loaded worker.
+# Bounded Goroutine Pool
+`pool` is a thin concurrency wrapper that provides bounded goroutine management.
 
-## Demo
-The pool was tested by a load generator that produces tasks at a inconsistent interval, faster than the time it takes to complete the tasks itself. 
-The tasks also take an inconsistent amount of time to finish.
-In this example the tasks were just sleeps.
+`pool` is a package that provides simple bounded concurrency limits for Go.
+Go was designed to have lightweight concurrency primitives with goroutines so that concurrent tasks could be called with `go`.
+Unfortunately this is usually taken too far.
+Much programs end up having boundless concurrency and as a result they comes with producing a significant amount of overhead.
 
-The gif below shows values for:
-- `Workers`: Pending requests for worker
-- `Avg Load`: Average pending requests for worker pool
-- `Std Dev`: Standard deviation of pending requests
-
-![gif](.github/lb.gif)
-
-## Design
-![diagram](.github/lb.png)
-
-*The design was based off the talk [concurrency is not parallelism](https://www.youtube.com/watch?v=cN_DpYBzKso) by Rob Pike, the diagram is also from there*
-
-1. Requests are made by a requester
-1. The Balancer dispatch's requests to a select worker in the worker pool
-1. The Worker will execute the task specified by the request 
+`pool` tackles this problem by providing a thin wrapper to allow Go programmers to continue thinking of concurrent code and execution without the worry that they're program is going to produce too much goroutines.
