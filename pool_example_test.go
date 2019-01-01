@@ -26,16 +26,17 @@ func fakeSearch(kind string) Search {
 	}
 }
 
-func fake() error {
+func fake(input string) error {
 	return nil
 }
 
-func ExamplePool_without() error {
+func ExamplePool_without() {
 	parts := make([]string, 20)
 	partChan := make(chan string)
 	errChan := make(chan error, 1)
 
-	ctx, _ := context.WithTimeout(context.Background(), time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 
 	// Bounded Consumers/Workers
 	var wg sync.WaitGroup
@@ -44,7 +45,7 @@ func ExamplePool_without() error {
 		go func() {
 			defer wg.Done()
 			for part := range partChan {
-				if err := fake(); err != nil {
+				if err := fake(part); err != nil {
 					errChan <- ctx.Err()
 					return
 				}
@@ -71,41 +72,34 @@ func ExamplePool_without() error {
 	wg.Wait()
 
 	select {
-	case err := <-errChan:
-		// did error happen?
-		return err
+	case <-errChan:
+		cancel()
+		// error occured
+		// return err
 	default:
 		// success
-		return nil
+		// return nil
 	}
 }
 
 func ExamplePool_with() {
 	parts := make([]string, 20)
-	partChan := make(chan string)
 
-	ctx, _ := context.WithTimeout(context.Background(), time.Second)
-
-	// Singular Producer
-	go func() {
-		for _, part := range parts {
-			select {
-			case partChan <- part:
-			case <-ctx.Done():
-				break
-			}
-		}
-		close(partChan)
-	}()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
 
 	// Bounded workers
 	pool, ctx := pool.New(ctx, 20)
-	// Singular Consumers
-	for part := range partChan {
+	for _, part := range parts {
 		part := part // https://golang.org/doc/faq#closures_and_goroutines
-		pool.Go(func() error {
-			return fake(part)
-		})
+		select {
+		case <-ctx.Done():
+			break
+		default:
+			pool.Go(func() error {
+				return fake(part)
+			})
+		}
 	}
 
 	if err := pool.Wait(); err != nil {

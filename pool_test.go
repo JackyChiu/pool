@@ -24,6 +24,10 @@ func TestPool(t *testing.T) {
 	for i := 0; i < poolSize; i++ {
 		<-results
 	}
+
+	if err := pool.Wait(); err != nil {
+		t.Error()
+	}
 }
 
 func TestPool_limits_goroutines(t *testing.T) {
@@ -63,12 +67,17 @@ func TestPool_exits_when_context_is_cancelled(t *testing.T) {
 
 func TestPool_exits_on_error(t *testing.T) {
 	expectedErr := errors.New("error")
-	pool, _ := New(context.Background(), 5)
+	pool, ctx := New(context.Background(), 5)
 	var events int32
 
 	for i := 0; i < 100; i++ {
 		pool.Go(func() error {
-			atomic.AddInt32(&events, 1)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				atomic.AddInt32(&events, 1)
+			}
 			if events != 1 {
 				time.Sleep(time.Millisecond)
 			}
@@ -76,13 +85,12 @@ func TestPool_exits_on_error(t *testing.T) {
 		})
 	}
 
-	err := pool.Wait()
-	if expectedErr.Error() != err.Error() {
+	if err := pool.Wait(); expectedErr != err {
 		t.Errorf("expected error to be %v, got: %v", expectedErr, err)
 	}
 
 	if events != 1 {
-		t.Error("expected only 1 go routine to run and error")
+		t.Errorf("expected only 1 goroutine to run and error, got: %v", events)
 	}
 }
 
