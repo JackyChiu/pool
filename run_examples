@@ -1,0 +1,13 @@
+#!/bin/bash
+
+echo "Running serial"
+go run examples/serial/serial.go $GOPATH/src/github.com/JackyChiu
+
+echo "Running parallel"
+go run examples/parallel/parallel.go $GOPATH/src/github.com/JackyChiu
+
+echo "Running bounded"
+go run examples/bounded/bounded.go $GOPATH/src/github.com/JackyChiu
+
+echo "Running pool"
+go run examples/pool/pool.go $GOPATH/src/github.com/JackyChiu

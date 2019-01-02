@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -113,13 +114,14 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	fmt.Printf("Took %v", time.Now().Sub(start))
+	log.Printf("Took %v", time.Now().Sub(start))
 
 	var paths []string
 	for path := range m {
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
+	log.Printf("MD5'd %v files", len(paths))
 	//for _, path := range paths {
 	//	fmt.Printf("%x  %s\n", m[path], path)
 	//}

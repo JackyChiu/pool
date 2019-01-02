@@ -2,7 +2,6 @@ package pool
 
 import (
 	"context"
-	"log"
 	"sync"
 )
 
@@ -12,10 +11,12 @@ type taskFunc func() error
 // Consider writting a Reset to use the pool again.
 // Should the pool be able to be used concurrently?
 type Pool struct {
-	ctx      context.Context
-	tasks    chan taskFunc
-	closer   sync.Once
-	errGroup errorPool
+	ctx context.Context
+
+	tasks     chan taskFunc
+	closeOnce sync.Once
+
+	errPool errorPool
 
 	// taskWg is used for task synconization in the Pool
 	taskWg sync.WaitGroup
@@ -31,7 +32,7 @@ type Pool struct {
 func New(ctx context.Context, poolSize int) (*Pool, context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Pool{
-		errGroup: errorPool{
+		errPool: errorPool{
 			cancel: cancel,
 		},
 		ctx:   ctx,
@@ -50,7 +51,7 @@ func (p *Pool) Go(task taskFunc) {
 
 	select {
 	case p.tasks <- task:
-		log.Println("send successful")
+		//log.Println("send successful")
 		return
 	case <-p.ctx.Done():
 		// cancel out
@@ -62,7 +63,7 @@ func (p *Pool) Go(task taskFunc) {
 	if p.Size() < int(p.cap) {
 		p.startWorker()
 	}
-	log.Println("starting wait")
+	//log.Println("starting wait")
 
 	select {
 	case p.tasks <- task:
@@ -74,7 +75,7 @@ func (p *Pool) Go(task taskFunc) {
 }
 
 func (p *Pool) startWorker() {
-	p.errGroup.Go(func() error {
+	p.errPool.Go(func() error {
 		for {
 			select {
 			case task, ok := <-p.tasks:
@@ -82,7 +83,7 @@ func (p *Pool) startWorker() {
 					// task channel is closed, kill routine
 					return nil
 				}
-				p.errGroup.execute(task)
+				p.errPool.execute(task)
 				// mark that task as done
 				p.taskWg.Done()
 			case <-p.ctx.Done():
@@ -96,14 +97,14 @@ func (p *Pool) startWorker() {
 
 func (p *Pool) Wait() error {
 	p.taskWg.Wait()
-	log.Println("task group done")
+	//log.Println("task group done")
 
-	p.closer.Do(func() {
+	p.closeOnce.Do(func() {
 		close(p.tasks)
 	})
 	//close(p.tasksBuffered)
 
-	return p.errGroup.wait()
+	return p.errPool.wait()
 }
 
 func (p *Pool) Size() int {
@@ -128,7 +129,7 @@ type errorPool struct {
 
 func (e *errorPool) wait() error {
 	e.wg.Wait()
-	log.Println("err group done")
+	//log.Println("err group done")
 	if e.cancel != nil {
 		e.cancel()
 	}
@@ -140,9 +141,9 @@ func (e *errorPool) Go(task taskFunc) {
 
 	go func() {
 		defer e.wg.Done()
-		log.Println("spun up")
+		//log.Println("spun up")
 		e.execute(task)
-		log.Println("spun down")
+		//log.Println("spun down")
 	}()
 }
 

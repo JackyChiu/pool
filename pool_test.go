@@ -83,9 +83,10 @@ func TestPool_exits_when_context_is_cancelled(t *testing.T) {
 	pool, ctx := New(ctx, 5)
 	var events int32
 
-	cancel()
-
 	for i := 0; i < 100; i++ {
+		if i >= 50 {
+			cancel()
+		}
 		pool.Go(func() error {
 			atomic.AddInt32(&events, 1)
 			return nil

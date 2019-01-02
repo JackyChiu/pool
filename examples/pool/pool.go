@@ -46,17 +46,16 @@ type result struct {
 // digester reads path names from paths and sends digests of the corresponding
 // files on c until either paths or done is closed.
 func digester(ctx context.Context, path string, c chan<- result) error {
+	// WORKER
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	log.Println("read file")
 	select {
 	case c <- result{path, md5.Sum(data)}:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	log.Println("done: read file")
 	return nil
 }
 
@@ -70,26 +69,33 @@ func MD5All(root string) (map[string][md5.Size]byte, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	pool, ctx := pool.New(ctx, 2)
-	defer pool.Wait()
+	pool, ctx := pool.New(ctx, 25)
 
 	paths := make(chan string)
-	go func() {
+	pool.Go(func() error {
 		// Close the paths channel after Walk returns.
 		defer close(paths)
-		walkFiles(ctx, root, paths)
-	}()
+		return walkFiles(ctx, root, paths)
+	})
 
 	// Start a fixed number of goroutines to read and digest files.
 	c := make(chan result)
-	for path := range paths {
-		path := path
-		pool.Go(func() error {
-			return digester(ctx, path, c)
-		})
-	}
+	// CONSUMER
+	// DEADLOCK happens because we haven't exited the producer of results
+	// no consumers are able to read!
+	pool.Go(func() error {
+		for path := range paths {
+			path := path
+			pool.Go(func() error {
+				// FINISH when md5'd file
+				return digester(ctx, path, c)
+			})
+		}
+		return nil
+		// FINISH when producer is done
+	})
 
+	// Closing goroutine
 	go func() {
 		defer close(c)
 		pool.Wait()
@@ -97,7 +103,6 @@ func MD5All(root string) (map[string][md5.Size]byte, error) {
 
 	m := make(map[string][md5.Size]byte)
 	for r := range c {
-		log.Println("received a result")
 		m[r.path] = r.sum
 		select {
 		case <-ctx.Done():
@@ -106,6 +111,7 @@ func MD5All(root string) (map[string][md5.Size]byte, error) {
 		}
 	}
 	// Check whether the Walk failed.
+	// The error can still be recieved here even tho it was called already in the closing goroutine
 	if err := pool.Wait(); err != nil {
 		return nil, err
 	}
@@ -121,13 +127,15 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	fmt.Printf("Took %v", time.Now().Sub(start))
+	log.Printf("Took %v", time.Now().Sub(start))
 
 	var paths []string
 	for path := range m {
 		paths = append(paths, path)
 	}
 	sort.Strings(paths)
+	log.Printf("MD5'd %v files", len(paths))
+
 	//for _, path := range paths {
 	//	fmt.Printf("%x  %s\n", m[path], path)
 	//}
