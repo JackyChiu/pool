@@ -31,19 +31,55 @@ func TestPool(t *testing.T) {
 }
 
 func TestPool_limits_goroutines(t *testing.T) {
-	// TODO: how can you actually test this?
-	// can use size var in pool
-	// spin up a bunch of "heavy" tasks
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	poolSize := 50
+	pool, ctx := New(ctx, poolSize)
+
+	for i := 0; i < 100; i++ {
+		pool.Go(func() error {
+			// "heavy" task
+			time.Sleep(50 * time.Millisecond)
+			return nil
+		})
+	}
+
+	if err := pool.Wait(); err != nil {
+		t.Errorf("expected no errors, got: %v", err)
+	}
+
+	if size := pool.Size(); size > poolSize {
+		t.Errorf("expected goroutines to cap at %v, got: %v", poolSize, size)
+	}
 }
 
 func TestPool_lazily_loads_goroutines(t *testing.T) {
-	// TODO: how can you actually test this?
-	// can use size var in pool
-	// spin up a bunch of "light" tasks
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	poolSize := 50
+	pool, ctx := New(ctx, poolSize)
+
+	for i := 0; i < 100; i++ {
+		pool.Go(func() error {
+			// "light" task
+			return nil
+		})
+	}
+
+	if err := pool.Wait(); err != nil {
+		t.Errorf("expected no errors, got: %v", err)
+	}
+
+	if size := pool.Size(); size >= poolSize {
+		t.Errorf("expected goroutines to run lazily, got: %v", size)
+	}
 }
 
 func TestPool_exits_when_context_is_cancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	pool, ctx := New(ctx, 5)
 	var events int32
 
@@ -61,7 +97,7 @@ func TestPool_exits_when_context_is_cancelled(t *testing.T) {
 	}
 
 	if events != 0 {
-		t.Error("expected only 1 go routine to run and error")
+		t.Errorf("expected no goroutines to run, got: %v", events)
 	}
 }
 
@@ -77,9 +113,6 @@ func TestPool_exits_on_error(t *testing.T) {
 				return ctx.Err()
 			default:
 				atomic.AddInt32(&events, 1)
-			}
-			if events != 1 {
-				time.Sleep(time.Millisecond)
 			}
 			return expectedErr
 		})

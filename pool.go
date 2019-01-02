@@ -59,6 +59,7 @@ func (p *Pool) Go(task taskFunc) {
 	case p.tasks <- task:
 		log.Println("send successful")
 		return
+	case <-p.ctx.Done():
 	default:
 	}
 	p.startWorker()
@@ -86,7 +87,6 @@ func (p *Pool) startWorker() {
 				}
 				p.errGroup.execute(task)
 			case <-p.ctx.Done():
-				log.Println("cancelled")
 				return p.ctx.Err()
 			}
 		}
