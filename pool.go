@@ -17,6 +17,9 @@ type Pool struct {
 	tasks         chan taskFunc
 	errGroup      errorPool
 
+	// taskWg is used for task synconization in the Pool
+	taskWg sync.WaitGroup
+
 	// cap is the capacity of the pool
 	cap int
 	// the current size of the pool
@@ -48,15 +51,17 @@ func (p *Pool) Go(task taskFunc) {
 	// Requiring cap + 1 tasks to start spinning up more goroutines is unexpected behaviour
 	if p.Size() >= int(p.cap) {
 		select {
+		case p.tasksBuffered <- task:
+			p.taskWg.Add(1)
 		case <-p.ctx.Done():
 			// don't block when context is cancelled
-		case p.tasksBuffered <- task:
 		}
 		return
 	}
 
 	select {
 	case p.tasks <- task:
+		p.taskWg.Add(1)
 		log.Println("send successful")
 		return
 	case <-p.ctx.Done():
@@ -67,6 +72,7 @@ func (p *Pool) Go(task taskFunc) {
 
 	select {
 	case p.tasks <- task:
+		p.taskWg.Add(1)
 	case <-p.ctx.Done():
 		// don't block when context is cancelled
 	}
@@ -89,14 +95,17 @@ func (p *Pool) startWorker() {
 			case <-p.ctx.Done():
 				return p.ctx.Err()
 			}
+			p.taskWg.Done()
 		}
 	})
 	p.incrementSize()
 }
 
 func (p *Pool) Wait() error {
+	p.taskWg.Wait()
 	close(p.tasks)
 	close(p.tasksBuffered)
+
 	return p.errGroup.wait()
 }
 
