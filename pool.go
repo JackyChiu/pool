@@ -12,10 +12,10 @@ type taskFunc func() error
 // Consider writting a Reset to use the pool again.
 // Should the pool be able to be used concurrently?
 type Pool struct {
-	ctx           context.Context
-	tasksBuffered chan taskFunc
-	tasks         chan taskFunc
-	errGroup      errorPool
+	ctx      context.Context
+	tasks    chan taskFunc
+	closer   sync.Once
+	errGroup errorPool
 
 	// taskWg is used for task synconization in the Pool
 	taskWg sync.WaitGroup
@@ -36,11 +36,7 @@ func New(ctx context.Context, poolSize int) (*Pool, context.Context) {
 		},
 		ctx:   ctx,
 		tasks: make(chan taskFunc),
-		// taskBufferedChan can be buffered up to a equalivient size of the pool.
-		// If the pool is ever filled then the allocated poolSize is too small or the task is too large.
-		tasksBuffered: make(chan taskFunc, poolSize),
-
-		cap: poolSize,
+		cap:   poolSize,
 	}, ctx
 }
 
@@ -49,31 +45,30 @@ func (p *Pool) Go(task taskFunc) {
 	// by trying to send a task and then selecting
 	// Ahh would've worked well if the task chan wasn't buffered
 	// Requiring cap + 1 tasks to start spinning up more goroutines is unexpected behaviour
-	if p.Size() >= int(p.cap) {
-		select {
-		case p.tasksBuffered <- task:
-			p.taskWg.Add(1)
-		case <-p.ctx.Done():
-			// don't block when context is cancelled
-		}
-		return
-	}
+
+	p.taskWg.Add(1)
 
 	select {
 	case p.tasks <- task:
-		p.taskWg.Add(1)
 		log.Println("send successful")
 		return
 	case <-p.ctx.Done():
+		// cancel out
+		p.taskWg.Done()
+		return
 	default:
 	}
-	p.startWorker()
+
+	if p.Size() < int(p.cap) {
+		p.startWorker()
+	}
 	log.Println("starting wait")
 
 	select {
 	case p.tasks <- task:
-		p.taskWg.Add(1)
 	case <-p.ctx.Done():
+		// cancel out
+		p.taskWg.Done()
 		// don't block when context is cancelled
 	}
 }
@@ -84,18 +79,16 @@ func (p *Pool) startWorker() {
 			select {
 			case task, ok := <-p.tasks:
 				if !ok {
+					// task channel is closed, kill routine
 					return nil
 				}
 				p.errGroup.execute(task)
-			case task, ok := <-p.tasksBuffered:
-				if !ok {
-					return nil
-				}
-				p.errGroup.execute(task)
+				// mark that task as done
+				p.taskWg.Done()
 			case <-p.ctx.Done():
+				p.taskWg.Done()
 				return p.ctx.Err()
 			}
-			p.taskWg.Done()
 		}
 	})
 	p.incrementSize()
@@ -103,8 +96,12 @@ func (p *Pool) startWorker() {
 
 func (p *Pool) Wait() error {
 	p.taskWg.Wait()
-	close(p.tasks)
-	close(p.tasksBuffered)
+	log.Println("task group done")
+
+	p.closer.Do(func() {
+		close(p.tasks)
+	})
+	//close(p.tasksBuffered)
 
 	return p.errGroup.wait()
 }
@@ -131,6 +128,7 @@ type errorPool struct {
 
 func (e *errorPool) wait() error {
 	e.wg.Wait()
+	log.Println("err group done")
 	if e.cancel != nil {
 		e.cancel()
 	}

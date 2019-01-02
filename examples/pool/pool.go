@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -19,8 +20,6 @@ import (
 // walk on the error channel.  If done is closed, walkFiles abandons its work.
 func walkFiles(ctx context.Context, root string, paths chan<- string) error {
 	// PRODUCER
-	// Close the paths channel after Walk returns.
-	defer close(paths)
 	// No select needed for this send, since errc is buffered.
 	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -51,11 +50,13 @@ func digester(ctx context.Context, path string, c chan<- result) error {
 	if err != nil {
 		return err
 	}
+	log.Println("read file")
 	select {
 	case c <- result{path, md5.Sum(data)}:
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+	log.Println("done: read file")
 	return nil
 }
 
@@ -70,13 +71,15 @@ func MD5All(root string) (map[string][md5.Size]byte, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	pool, ctx := pool.New(ctx, 20)
+	pool, ctx := pool.New(ctx, 2)
 	defer pool.Wait()
 
 	paths := make(chan string)
-	pool.Go(func() error {
-		return walkFiles(ctx, root, paths)
-	})
+	go func() {
+		// Close the paths channel after Walk returns.
+		defer close(paths)
+		walkFiles(ctx, root, paths)
+	}()
 
 	// Start a fixed number of goroutines to read and digest files.
 	c := make(chan result)
@@ -86,10 +89,15 @@ func MD5All(root string) (map[string][md5.Size]byte, error) {
 			return digester(ctx, path, c)
 		})
 	}
-	// End of pipeline. OMIT
+
+	go func() {
+		defer close(c)
+		pool.Wait()
+	}()
 
 	m := make(map[string][md5.Size]byte)
 	for r := range c {
+		log.Println("received a result")
 		m[r.path] = r.sum
 		select {
 		case <-ctx.Done():
