@@ -13,8 +13,9 @@ type taskFunc func() error
 type Pool struct {
 	ctx context.Context
 
-	tasks     chan taskFunc
-	closeOnce sync.Once
+	tasks         chan taskFunc
+	tasksBuffered chan taskFunc
+	closeOnce     sync.Once
 
 	errPool errorPool
 
@@ -31,14 +32,17 @@ type Pool struct {
 
 func New(ctx context.Context, poolSize int) (*Pool, context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
-	return &Pool{
+	p := &Pool{
 		errPool: errorPool{
 			cancel: cancel,
 		},
-		ctx:   ctx,
-		tasks: make(chan taskFunc),
-		cap:   poolSize,
-	}, ctx
+		ctx:           ctx,
+		tasks:         make(chan taskFunc),
+		tasksBuffered: make(chan taskFunc, poolSize),
+		cap:           poolSize,
+	}
+	p.startWorker() // spin up one worker
+	return p, ctx
 }
 
 func (p *Pool) Go(task taskFunc) {
@@ -48,6 +52,16 @@ func (p *Pool) Go(task taskFunc) {
 	// Requiring cap + 1 tasks to start spinning up more goroutines is unexpected behaviour
 
 	p.taskWg.Add(1)
+
+	if p.Size() >= int(p.cap) {
+		select {
+		case p.tasksBuffered <- task:
+		case <-p.ctx.Done():
+			p.taskWg.Done()
+			// don't block when context is cancelled
+		}
+		return
+	}
 
 	select {
 	case p.tasks <- task:
@@ -59,10 +73,8 @@ func (p *Pool) Go(task taskFunc) {
 		return
 	default:
 	}
+	p.startWorker()
 
-	if p.Size() < int(p.cap) {
-		p.startWorker()
-	}
 	//log.Println("starting wait")
 
 	select {
@@ -78,6 +90,14 @@ func (p *Pool) startWorker() {
 	p.errPool.Go(func() error {
 		for {
 			select {
+			case task, ok := <-p.tasksBuffered:
+				if !ok {
+					// task channel is closed, kill routine
+					return nil
+				}
+				p.errPool.execute(task)
+				// mark that task as done
+				p.taskWg.Done()
 			case task, ok := <-p.tasks:
 				if !ok {
 					// task channel is closed, kill routine

@@ -69,7 +69,7 @@ func MD5All(root string) (map[string][md5.Size]byte, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	pool, ctx := pool.New(ctx, 25)
+	pool, ctx := pool.New(ctx, 20)
 
 	paths := make(chan string)
 	pool.Go(func() error {
@@ -79,43 +79,50 @@ func MD5All(root string) (map[string][md5.Size]byte, error) {
 	})
 
 	// Start a fixed number of goroutines to read and digest files.
-	c := make(chan result)
+	results := make(chan result)
 	// CONSUMER
 	// DEADLOCK happens because we haven't exited the producer of results
 	// no consumers are able to read!
-	pool.Go(func() error {
+	go func() {
 		for path := range paths {
 			path := path
 			pool.Go(func() error {
 				// FINISH when md5'd file
-				return digester(ctx, path, c)
+				return digester(ctx, path, results)
 			})
 		}
-		return nil
 		// FINISH when producer is done
-	})
+	}()
 
 	// Closing goroutine
 	go func() {
-		defer close(c)
+		defer close(results)
 		pool.Wait()
 	}()
 
-	m := make(map[string][md5.Size]byte)
-	for r := range c {
-		m[r.path] = r.sum
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-		}
-	}
-	// Check whether the Walk failed.
+	m := collectResults(ctx, results)
 	// The error can still be recieved here even tho it was called already in the closing goroutine
 	if err := pool.Wait(); err != nil {
 		return nil, err
 	}
 	return m, nil
+}
+
+// collectResults results blocks until all results are read and the producer has closed the channel.
+func collectResults(ctx context.Context, results <-chan result) map[string][md5.Size]byte {
+	m := make(map[string][md5.Size]byte)
+	for {
+		select {
+		case r, ok := <-results:
+			if !ok {
+				return m
+			}
+			m[r.path] = r.sum
+		case <-ctx.Done():
+			// treat the error with the `pool.Wait` call
+			return m
+		}
+	}
 }
 
 func main() {
