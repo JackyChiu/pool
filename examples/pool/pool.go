@@ -4,12 +4,10 @@ import (
 	"context"
 	"crypto/md5"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
-	"sort"
 	"time"
 
 	"github.com/JackyChiu/pool"
@@ -18,9 +16,7 @@ import (
 // walkFiles starts a goroutine to walk the directory tree at root and send the
 // path of each regular file on the string channel.  It sends the result of the
 // walk on the error channel.  If done is closed, walkFiles abandons its work.
-func walkFiles(ctx context.Context, root string, paths chan<- string) error {
-	// PRODUCER
-	// No select needed for this send, since errc is buffered.
+func walkFileTree(ctx context.Context, root string, paths chan<- string) error {
 	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -43,73 +39,23 @@ type result struct {
 	sum  [md5.Size]byte
 }
 
-// digester reads path names from paths and sends digests of the corresponding
-// files on c until either paths or done is closed.
-func digester(ctx context.Context, path string, c chan<- result) error {
-	// WORKER
+// readAndSumFile reads path names from paths and sends digests of the corresponding
+// files on results until either paths or done is closed.
+func readAndSumFile(ctx context.Context, path string, c chan<- result) error {
 	data, err := ioutil.ReadFile(path)
 	if err != nil {
 		return err
 	}
 	select {
 	case c <- result{path, md5.Sum(data)}:
+		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	return nil
 }
 
-// MD5All reads all the files in the file tree rooted at root and returns a map
-// from file path to the MD5 sum of the file's contents.  If the directory walk
-// fails or any read operation fails, MD5All returns an error.  In that case,
-// MD5All does not wait for inflight read operations to complete.
-func MD5All(root string) (map[string][md5.Size]byte, error) {
-	// MD5All closes the done channel when it returns; it may do so before
-	// receiving all the values from c and errc.
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	pool, ctx := pool.New(ctx, 20)
-
-	paths := make(chan string)
-	pool.Go(func() error {
-		// Close the paths channel after Walk returns.
-		defer close(paths)
-		return walkFiles(ctx, root, paths)
-	})
-
-	// Start a fixed number of goroutines to read and digest files.
-	results := make(chan result)
-	// CONSUMER
-	// DEADLOCK happens because we haven't exited the producer of results
-	// no consumers are able to read!
-	go func() {
-		for path := range paths {
-			path := path
-			pool.Go(func() error {
-				// FINISH when md5'd file
-				return digester(ctx, path, results)
-			})
-		}
-		// FINISH when producer is done
-	}()
-
-	// Closing goroutine
-	go func() {
-		defer close(results)
-		pool.Wait()
-	}()
-
-	m := collectResults(ctx, results)
-	// The error can still be recieved here even tho it was called already in the closing goroutine
-	if err := pool.Wait(); err != nil {
-		return nil, err
-	}
-	return m, nil
-}
-
-// collectResults results blocks until all results are read and the producer has closed the channel.
-func collectResults(ctx context.Context, results <-chan result) map[string][md5.Size]byte {
+// buildResultMap results blocks until all results are read and the producer has closed the channel.
+func buildResultMap(ctx context.Context, results <-chan result) map[string][md5.Size]byte {
 	m := make(map[string][md5.Size]byte)
 	for {
 		select {
@@ -119,31 +65,53 @@ func collectResults(ctx context.Context, results <-chan result) map[string][md5.
 			}
 			m[r.path] = r.sum
 		case <-ctx.Done():
-			// treat the error with the `pool.Wait` call
 			return m
 		}
 	}
 }
 
+// MD5All reads all the files in the file tree rooted at root and returns a map
+// from file path to the MD5 sum of the file's contents.  If the directory walk
+// fails or any read operation fails, MD5All returns an error. In that case,
+// MD5All does not wait for inflight read operations to complete.
+func MD5All(root string) (map[string][md5.Size]byte, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Allow a fixed number of goroutines to read and digest files.
+	pool, ctx := pool.New(ctx, 20)
+
+	paths := make(chan string, 10)
+	pool.Go(func() error {
+		defer close(paths)
+		return walkFileTree(ctx, root, paths)
+	})
+
+	results := make(chan result, 10)
+	go func() {
+		defer close(results)
+		for filepath := range paths {
+			filepath := filepath
+			pool.Go(func() error {
+				return readAndSumFile(ctx, filepath, results)
+			})
+		}
+		pool.Wait()
+	}()
+
+	m := buildResultMap(ctx, results)
+	if err := pool.Wait(); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func main() {
-	// Calculate the MD5 sum of all files under the specified directory,
-	// then print the results sorted by path name.
+	// Calculate the MD5 sum of all files under the specified directory.
 	start := time.Now()
 	m, err := MD5All(os.Args[1])
 	if err != nil {
-		fmt.Println(err)
-		return
+		panic(err)
 	}
-	log.Printf("Took %v", time.Now().Sub(start))
-
-	var paths []string
-	for path := range m {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	log.Printf("MD5'd %v files", len(paths))
-
-	//for _, path := range paths {
-	//	fmt.Printf("%x  %s\n", m[path], path)
-	//}
+	log.Printf("Took %v to MD5 %v files", time.Now().Sub(start), len(m))
 }

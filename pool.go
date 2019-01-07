@@ -26,7 +26,6 @@ type Pool struct {
 	cap int
 	// the current size of the pool
 	size int
-
 	lock sync.RWMutex
 }
 
@@ -121,8 +120,8 @@ func (p *Pool) Wait() error {
 
 	p.closeOnce.Do(func() {
 		close(p.tasks)
+		close(p.tasksBuffered)
 	})
-	//close(p.tasksBuffered)
 
 	return p.errPool.wait()
 }

@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"sort"
 	"sync"
 	"time"
 )
@@ -17,7 +16,7 @@ import (
 // path of each regular file on the string channel.  It sends the result of the
 // walk on the error channel.  If done is closed, walkFiles abandons its work.
 func walkFiles(done <-chan struct{}, root string) (<-chan string, <-chan error) {
-	paths := make(chan string)
+	paths := make(chan string, 10)
 	errc := make(chan error, 1)
 	go func() {
 		// Close the paths channel after Walk returns.
@@ -61,6 +60,18 @@ func digester(done <-chan struct{}, paths <-chan string, c chan<- result) {
 	}
 }
 
+// buildResultMap results blocks until all results are read and the producer has closed the channel.
+func buildResultMap(results <-chan result) map[string][md5.Size]byte {
+	m := make(map[string][md5.Size]byte)
+	for r := range results {
+		if r.err != nil {
+			return m
+		}
+		m[r.path] = r.sum
+	}
+	return m
+}
+
 // MD5All reads all the files in the file tree rooted at root and returns a map
 // from file path to the MD5 sum of the file's contents.  If the directory walk
 // fails or any read operation fails, MD5All returns an error.  In that case,
@@ -74,30 +85,24 @@ func MD5All(root string) (map[string][md5.Size]byte, error) {
 	paths, errc := walkFiles(done, root)
 
 	// Start a fixed number of goroutines to read and digest files.
-	c := make(chan result)
+	results := make(chan result, 10)
 	var wg sync.WaitGroup
 	const numDigesters = 20
 	wg.Add(numDigesters)
 	for i := 0; i < numDigesters; i++ {
 		go func() {
-			digester(done, paths, c)
+			digester(done, paths, results)
 			wg.Done()
 		}()
 	}
 
 	go func() {
 		wg.Wait()
-		close(c)
+		close(results)
 	}()
-	// End of pipeline. OMIT
+	// End of pipeline.
 
-	m := make(map[string][md5.Size]byte)
-	for r := range c {
-		if r.err != nil {
-			return nil, r.err
-		}
-		m[r.path] = r.sum
-	}
+	m := buildResultMap(results)
 	// Check whether the Walk failed.
 	if err := <-errc; err != nil {
 		return nil, err
@@ -114,15 +119,5 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	log.Printf("Took %v", time.Now().Sub(start))
-
-	var paths []string
-	for path := range m {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	log.Printf("MD5'd %v files", len(paths))
-	//for _, path := range paths {
-	//	fmt.Printf("%x  %s\n", m[path], path)
-	//}
+	log.Printf("Took %v to MD5 %v files", time.Now().Sub(start), len(m))
 }
